@@ -222,6 +222,16 @@
     min-height:16px;
     font-weight:600;
   }
+  #autosaveMsg{
+    text-align:center;
+    font-size:13px;
+    margin-top:4px;
+    min-height:16px;
+    font-weight:600;
+  }
+  #autosaveMsg.ok{color:var(--green);}
+  #autosaveMsg.err{color:var(--red);}
+  #autosaveMsg.pending{color:#4B4870;}
 </style>
 </head>
 <body>
@@ -253,6 +263,8 @@
       <div class="badge" id="scoreBadge"></div>
     </div>
 
+    <div id="autosaveMsg" class="pending">Guardando resultados…</div>
+
     <div class="card">
       <div class="q-text" style="margin-bottom:12px;">Desglose por tema</div>
       <div id="breakdown"></div>
@@ -270,6 +282,9 @@
 </div>
 
 <script>
+// Pega aquí la URL de tu Google Apps Script (termina en /exec)
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz4EXjNy1-RNrUogyTlettUedso8YXiDUo07QMfLTCyd7UhHHPxdsk8LJjDIKabRDrlNQ/exec";
+
 const questions = [
   {
     topic: "Suma de importes",
@@ -412,15 +427,16 @@ document.getElementById('submitBtn').addEventListener('click', () => {
 
   warnMsg.textContent = '';
   const pct = Math.round((correctCount / questions.length) * 100);
+  const passed = pct >= 70;
 
   document.getElementById('scorePct').textContent = pct + '%';
   document.getElementById('scoreFraction').textContent = `${correctCount} de ${questions.length} correctas — ${nombre}`;
   const badge = document.getElementById('scoreBadge');
-  const passed = pct >= 70;
   badge.textContent = passed ? 'Aprobado' : 'No aprobado';
   badge.className = 'badge ' + (passed ? 'pass' : 'fail');
 
   const breakdownDiv = document.getElementById('breakdown');
+  const desgloseTexto = Object.entries(topicStats).map(([topic, stat]) => `${topic}: ${stat.correct}/${stat.total}`).join(' | ');
   breakdownDiv.innerHTML = Object.entries(topicStats).map(([topic, stat]) => `
     <div class="breakdown-item">
       <span>${topic}</span>
@@ -445,6 +461,30 @@ document.getElementById('submitBtn').addEventListener('click', () => {
   window._resultsSummary = `Examen de Habilidades Matemáticas — Chofer\nCandidato: ${nombre}\nResultado: ${correctCount}/${questions.length} (${pct}%) — ${passed ? 'Aprobado' : 'No aprobado'}\n\n` +
     Object.entries(topicStats).map(([topic, stat]) => `${topic}: ${stat.correct}/${stat.total}`).join('\n') +
     `\n\nFecha: ${new Date().toLocaleDateString('es-MX')}`;
+
+  // Envío automático a Google Sheets
+  const autosaveMsg = document.getElementById('autosaveMsg');
+  const payload = {
+    nombre: nombre,
+    correctas: correctCount,
+    total: questions.length,
+    porcentaje: pct,
+    aprobado: passed ? 'Aprobado' : 'No aprobado',
+    desglose: desgloseTexto
+  };
+
+  fetch(SCRIPT_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  }).then(() => {
+    autosaveMsg.textContent = 'Resultados guardados automáticamente ✓';
+    autosaveMsg.className = 'ok';
+  }).catch(() => {
+    autosaveMsg.textContent = 'No se pudo guardar automáticamente. Usa el botón "Copiar resultados" y envíalos por WhatsApp o correo.';
+    autosaveMsg.className = 'err';
+  });
 });
 
 document.getElementById('copyBtn').addEventListener('click', () => {
